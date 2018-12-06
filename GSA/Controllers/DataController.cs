@@ -14,9 +14,23 @@ namespace GSA.Controllers
         private readonly ApplicationDbContext _context;
 
         [HttpGet("monthly-capital")]
-        public IActionResult GetMonthlyCapital([FromQuery] string[] strategies)
+        public IEnumerable<CapitalDTO> GetMonthlyCapital([FromQuery] string[] strategies)
         {
-            return Ok("");
+            var strats = _context.Strategies.Where(s => strategies.Contains(s.Name)).ToList();
+            var monthlyCapitals = new List<CapitalDTO>();
+
+            foreach (var strat in strats)
+            {
+                var capitals = _context.Capitals.Where(c => strats.Exists(s => s.Id == c.StrategyId)).ToList();
+
+                capitals.ForEach(c =>
+                {
+                    monthlyCapitals.Add(new CapitalDTO() { Capital = c.Value, Date = c.Date, Strategy = strat.Name });
+                });
+
+            }
+
+            return monthlyCapitals;
         }
 
         [HttpGet("cumulative-pnl")]

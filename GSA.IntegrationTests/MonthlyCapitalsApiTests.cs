@@ -1,7 +1,10 @@
+using GSA.Model;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -19,14 +22,17 @@ namespace GSA.IntegrationTests
         }
 
         [DataTestMethod]
-        [DataRow("/api/monthly-capital")]
+        [DataRow("/api/cumulative-pnl")]
         public async Task Get_EndpointsReturnSuccessAndCorrectContentType(string url)
         {
             // Arrange
             var client = _server.CreateClient();
+                        
+            var response = await client.GetAsync(url)
+        , new StringContent(JsonConvert.SerializeObject(IEnumerable<CapitalDTO>),
+    Encoding.UTF8,
+    "application/json"));
 
-            // Act
-            var response = await client.GetAsync(url);
 
             // Assert
             response.EnsureSuccessStatusCode(); // Status Code 200-299
