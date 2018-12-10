@@ -16,7 +16,7 @@ namespace GSA.Controllers
         [HttpGet("monthly-capital")]
         public IEnumerable<CapitalDTO> GetMonthlyCapital([FromQuery] string[] strategies)
         {
-            var strats = _context.Strategies.Where(s => strategies.Contains(s.Name)).ToList();
+            var strats = _context.Strategies.Where(s => strategies.Contains(s.StratName)).ToList();
             var monthlyCapitals = new List<CapitalDTO>();
 
             foreach (var strat in strats)
@@ -25,7 +25,7 @@ namespace GSA.Controllers
 
                 capitals.ForEach(c =>
                 {
-                    monthlyCapitals.Add(new CapitalDTO() { Capital = c.Value, Date = c.Date, Strategy = strat.Name });
+                    monthlyCapitals.Add(new CapitalDTO() { Capital = c.Value, Date = c.Date, Strategy = strat.StratName });
                 });
 
             }
@@ -64,7 +64,7 @@ namespace GSA.Controllers
         [HttpGet("compound-daily-returns/{strategy}")]
         public IEnumerable<CompoundDTO> GetCompoundDailyReturns(string strategy)
         {
-            var strat = _context.Strategies.FirstOrDefault(s => s.Name.Equals(strategy));
+            var strat = _context.Strategies.FirstOrDefault(s => s.StratName.Equals(strategy));
             var compounds = new List<CompoundDTO>();
 
             // Unsure how to calculate
@@ -86,7 +86,7 @@ namespace GSA.Controllers
                 var monthlyCompound = returns.Aggregate(1m, (acc, x) => acc * (1 + x)) - 1;
                 var monthlyCompoundRounded = Math.Round((decimal)monthlyCompound, 5);
 
-                compounds.Add(new CompoundDTO() { CompoundReturn = monthlyCompoundRounded, Date = startDate, Strategy = strat.Name });
+                compounds.Add(new CompoundDTO() { CompoundReturn = monthlyCompoundRounded, Date = startDate, Strategy = strat.StratName });
 
             }
 
