@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using GSA.Data;
 using GSA.Model;
 using Microsoft.AspNetCore.Mvc;
@@ -12,85 +11,93 @@ namespace GSA.Controllers
     public class DataController : Controller
     {
         private readonly ApplicationDbContext _context;
+        public DataController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
 
         [HttpGet("monthly-capital")]
-        public IEnumerable<CapitalDTO> GetMonthlyCapital([FromQuery] string[] strategies)
+        public IEnumerable<CapitalDTO> GetMonthlyCapital([FromQuery] string strategies)
         {
-            var strats = _context.Strategies.Where(s => strategies.Contains(s.StratName)).ToList();
+            var strategiesArray = String.Join(",", strategies);
+            var strats = _context.Strategies.Where(s => strategiesArray.Contains(s.StratName)).ToList();
             var monthlyCapitals = new List<CapitalDTO>();
 
             foreach (var strat in strats)
             {
-                var capitals = _context.Capitals.Where(c => strats.Exists(s => s.Id == c.StrategyId)).ToList();
-
-                capitals.ForEach(c =>
-                {
-                    monthlyCapitals.Add(new CapitalDTO() { Capital = c.Value, Date = c.Date, Strategy = strat.StratName });
-                });
-
+                var capitals = _context.Capitals.Where(c => c.StrategyId == strat.Id).ToList();
+                monthlyCapitals.AddRange(
+                    capitals.Select(a => new CapitalDTO()
+                    {
+                        Capital = a.Value,
+                        Date = a.Date,
+                        Strategy = strat.StratName
+                    }).ToList());
             }
 
-            return monthlyCapitals;
+            return monthlyCapitals
+                .OrderBy(a => a.Date)
+                .ThenBy(b => b.Strategy);
         }
 
         [HttpGet("cumulative-pnl")]
         public IEnumerable<PNLDTO> GetCumalativePNL([FromQuery] string startDate, [FromQuery] string region)
         {
-            var date = DateTime.ParseExact(startDate, "yyyy-MM-dd", null);
-            var strats = _context.Strategies.Where(s => region.Contains(s.Region)).ToList();
-            var cumulativePnls = new List<PNLDTO>();
-            var dates = new List<DateTime>();
-
-            foreach (var strat in strats)
-            {
-
-                var pnls = _context.PNLs.Where(p => strats.Exists(s => s.Id == p.StrategyId) && p.Date >= date).ToList();
-
-                pnls.ForEach(c => dates.Add(c.Date));
-
-                dates = dates.Distinct().ToList();
-
-                dates.ForEach(d =>
+            var strategiesIds = _context.Strategies.Where(a => a.Region == region).Select(a => a.Id).ToList();
+            var date = DateTime.ParseExact(startDate, SeedData.DateType, null);
+            var results = _context.PNLs
+                .Where(a => strategiesIds.Contains(a.StrategyId)
+                && a.Date >= date)
+                .GroupBy(a => a.Date)
+                .Select(a => new PNLDTO
                 {
-                    var agg = pnls.Where(p => p.Date == d).Aggregate(0, (acc, x) => acc + x.Value);
-                    cumulativePnls.Add(new PNLDTO() { CumulativePnl = agg, Date = d, Region = strat.Region });
-                });
+                    Region = region,
+                    Date = a.First().Date,
+                    CumulativePnl = a.Sum(c => c.Value)
+                })
+                .OrderBy(a => a.Date)
+                .ToList();
 
-            }
-
-            return cumulativePnls;
+            return results;
         }
 
         [HttpGet("compound-daily-returns/{strategy}")]
         public IEnumerable<CompoundDTO> GetCompoundDailyReturns(string strategy)
-        {
+        {            
             var strat = _context.Strategies.FirstOrDefault(s => s.StratName.Equals(strategy));
-            var compounds = new List<CompoundDTO>();
+            var capitals = _context.Capitals.Where(a => a.StrategyId == strat.Id).OrderBy(a => a.Date);
 
-            // Unsure how to calculate
+            var pnls = _context.PNLs.Where(p => p.StrategyId == strat.Id).OrderBy(p => p.Date).ToList();
 
-            var capitals = _context.Capitals.Where(c => c.StrategyId == strat.Id);
-            var pnls = _context.PNLs.Where(p => p.StrategyId == strat.Id).OrderBy(p => p.Date);
+            var compounded = new List<CompoundDTO>();
+            var initialInvestment = 0;
+            var investmentReturn = 0;
+            var startYear = 0;
+            var startMonth = 0;
 
-            foreach (var capital in capitals)
-            {
-                var startDate = capital.Date;
-                var endDate = startDate.AddMonths(1);
-                var startPNL = pnls.First(p => p.Date >= startDate).Value;
-
-                var returns = pnls
-                    .Where(p => startDate <= p.Date && p.Date < endDate)
-                    .Select<PNL, decimal>(p => (decimal)(p.Value / startPNL))
-                    .ToList();
-
-                var monthlyCompound = returns.Aggregate(1m, (acc, x) => acc * (1 + x)) - 1;
-                var monthlyCompoundRounded = Math.Round((decimal)monthlyCompound, 5);
-
-                compounds.Add(new CompoundDTO() { CompoundReturn = monthlyCompoundRounded, Date = startDate, Strategy = strat.StratName });
-
+            foreach (var pnl in pnls) {
+                if (startYear != pnl.Date.Year && startMonth != pnl.Date.Month)
+                {
+                    startYear = pnl.Date.Year;
+                    startMonth = pnl.Date.Month;
+                    initialInvestment = capitals.FirstOrDefault(a => a.Date.Year == startYear 
+                    && a.Date.Month == startMonth).Value;
+                    investmentReturn = initialInvestment;
+                }
+                investmentReturn = investmentReturn + pnl.Value;
+                decimal compoundedReturn = 0;
+                if (initialInvestment != 0) {
+                    compoundedReturn = Math.Round((decimal)investmentReturn / initialInvestment, 5);
+                }
+                
+                compounded.Add(new CompoundDTO
+                {
+                    Strategy = strat.StratName,
+                    Date = pnl.Date,
+                    CompoundReturn = compoundedReturn
+                });
             }
-
-            return compounds;
+            return compounded;
         }
     }
 }

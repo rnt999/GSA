@@ -1,23 +1,21 @@
 ﻿using CsvHelper;
-using CsvHelper.Configuration;
 using GSA.Model;
 using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace GSA.Data
 {
     public class SeedData
     {
-        const string dateType = "yyyy-MM-dd";
+        public const string DateType = "yyyy-MM-dd";
         const string capitalFile = "\\DataStore\\capital.csv";
         const string pnlFile = "\\DataStore\\pnl.csv";
         const string propertiesFile = "\\DataStore\\properties.csv";
         const string strategyName = "Strategy";
+        const string dateKey = "Date";
 
         public static void Initialize(IServiceProvider serviceProvider)
         {
@@ -47,13 +45,25 @@ namespace GSA.Data
                 {
                     var csv = new CsvReader(fileReader);
 
-                    while (csv.Read())
+                    foreach (dynamic records in csv.GetRecords<dynamic>())
                     {
-                        var intField = csv.GetField<DateTime>(0);
-                        var stringField = csv.GetField<string>(1);
+                        var date = DateTime.Now;
+                        foreach (var record in records)
+                        {                            
+                            if (record.Key == dateKey)
+                            {
+                                date = DateTime.ParseExact(record.Value, DateType, null);
+                            }
+                            else {
+                                var strategyId = strategies.First(s => s.StratName.Equals(record.Key)).Id;
+                                var capital = new Capital() { StrategyId = strategyId, Date = date, Value = Int32.Parse(record.Value) };
+                                context.Capitals.Add(capital);
+                            }
+                        }
                     }
+                    context.SaveChanges();
                 }
-                context.SaveChanges();
+                
             }
 
             if (!context.PNLs.Any())
@@ -63,18 +73,23 @@ namespace GSA.Data
                     var csv = new CsvReader(fileReader);
                     foreach (dynamic records in csv.GetRecords<dynamic>().ToList())
                     {
-                        var count = records.Count;
-                        var date = DateTime.ParseExact(records[0], dateType, null);
-
-                        for (var i = 1; i < count; i++)
+                        var date = DateTime.Now;
+                        foreach (var record in records)
                         {
-                            var strategyId = strategies.First(s => s.StratName.Equals(strategyName + i)).Id;
-                            var pnl = new PNL() { StrategyId = strategyId, Date = date, Value = records[i] };
-                            context.PNLs.Add(pnl);
+                            if (record.Key == dateKey)
+                            {
+                                date = DateTime.ParseExact(record.Value, DateType, null);
+                            }
+                            else
+                            {
+                                var strategyId = strategies.First(s => s.StratName.Equals(record.Key)).Id;
+                                var pnl = new PNL() { StrategyId = strategyId, Date = date, Value = Int32.Parse(record.Value) };
+                                context.PNLs.Add(pnl);
+                            }
                         }
                     }
-                }
-                context.SaveChanges();
+                    context.SaveChanges();
+                }                
             }
  
         }
